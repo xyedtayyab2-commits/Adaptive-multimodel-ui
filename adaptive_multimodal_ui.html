@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adaptive Multimodal UI</title>
+
+<style>
+  :root {
+    --btn-padding: 10px 18px;
+    --btn-font-size: 0.95rem;
+    --focus-ring: transparent;
+  }
+
+  body.mode-touch {
+    --btn-padding: 16px 28px;
+    --btn-font-size: 1.1rem;
+  }
+
+  body.mode-keyboard {
+    --focus-ring: 4px solid #ff9900;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 24px;
+    font-family: Arial, sans-serif;
+    background: #f0f2f5;
+    color: #222;
+    transition: background 0.3s;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 18px;
+  }
+
+  h1 { margin-bottom: 8px; }
+
+  .subtitle {
+    color: #666;
+    margin-top: 0;
+  }
+
+  .toolbar {
+    max-width: 900px;
+    margin: 0 auto 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  button {
+    padding: var(--btn-padding);
+    font-size: var(--btn-font-size);
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    background: #0056b3;
+    color: white;
+    font-weight: bold;
+    outline: var(--focus-ring);
+    transition: 0.2s;
+  }
+
+  button:hover { transform: translateY(-1px); }
+
+  #micBtn { background: #28a745; }
+
+  .status {
+    max-width: 900px;
+    margin: 0 auto 15px;
+    padding: 12px;
+    background: white;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #ddd;
+  }
+
+  #stage {
+    width: 100%;
+    max-width: 700px;
+    height: 360px;
+    margin: 20px auto;
+    background: white;
+    border: 2px dashed #bbb;
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .target-box {
+    width: 80px;
+    height: 80px;
+    background: #0056b3;
+    color: white;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    position: absolute;
+    top: 140px;
+    left: calc(50% - 40px);
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    transition: background-color .3s, transform .2s;
+  }
+
+  .target-box:active { cursor: grabbing; }
+
+  .grid {
+    max-width: 900px;
+    margin: 25px auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+  }
+
+  .card {
+    background: white;
+    padding: 25px;
+    border-radius: 9px;
+    border: 2px solid #ddd;
+    text-align: center;
+    transition: .3s;
+  }
+
+  .card.fixated {
+    border-color: #ff4757;
+    box-shadow: 0 0 15px rgba(255,71,87,.45);
+  }
+
+  #gazePointer {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #ff4757;
+    background: rgba(255,71,87,.25);
+    border-radius: 50%;
+    position: fixed;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    z-index: 9999;
+    display: none;
+  }
+
+  #metrics {
+    max-width: 900px;
+    margin: 15px auto;
+    padding: 15px;
+    background: #222;
+    color: white;
+    border-radius: 8px;
+    font-family: monospace;
+    line-height: 1.7;
+  }
+
+  .mode-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    background: #333;
+    color: white;
+    border-radius: 5px;
+    font-weight: bold;
+  }
+
+  @media (max-width: 650px) {
+    .grid { grid-template-columns: 1fr; }
+    body { padding: 15px; }
+    #stage { height: 300px; }
+  }
+</style>
+</head>
+
+<body class="mode-mouse">
+
+<header>
+  <h1>Adaptive Multimodal UI</h1>
+  <p class="subtitle">
+    Speech + Gesture + Eye-Gaze + Adaptive Modality
+  </p>
+  <span class="mode-badge" id="modalityBadge">
+    Active Modality: Mouse
+  </span>
+</header>
+
+<div class="toolbar">
+  <button id="micBtn">🎙️ Start Voice Control</button>
+  <button onclick="changeBoxColor('#d9534f')">Red</button>
+  <button onclick="changeBoxColor('#0056b3')">Blue</button>
+  <button onclick="changeBoxColor('#28a745')">Green</button>
+  <button onclick="makeBigger()">Bigger</button>
+  <button onclick="resetBox()">Reset</button>
+</div>
+
+<div class="status" id="status">
+  Voice control offline. Use mouse/touch to drag the box or voice commands.
+</div>
+
+<div id="stage">
+  <div class="target-box" id="box">BOX</div>
+</div>
+
+<h2 style="text-align:center;">Eye-Gaze Fixation Simulation</h2>
+<p style="text-align:center;">
+  Move the mouse to simulate eye gaze. Stay over a card for 500ms to trigger fixation.
+</p>
+
+<div class="grid">
+  <div class="card" data-id="Card 1">
+    <h3>Hero Offer</h3>
+    <p>Focus Area A</p>
+  </div>
+
+  <div class="card" data-id="Card 2">
+    <h3>Product Video</h3>
+    <p>Focus Area B</p>
+  </div>
+
+  <div class="card" data-id="Card 3">
+    <h3>Call to Action</h3>
+    <p>Focus Area C</p>
+  </div>
+</div>
+
+<div id="gazePointer"></div>
+
+<div id="metrics">
+  Modality: <span id="metricMode">Mouse</span><br>
+  Gaze Position: (<span id="gx">0</span>, <span id="gy">0</span>)<br>
+  Current Fixation: <span id="fixTarget">None</span><br>
+  Dwell Time: <span id="dwell">0</span> ms
+</div>
+
+<script>
+/* =========================================================
+   1. COMMON ELEMENTS
+========================================================= */
+
+const box = document.getElementById("box");
+const status = document.getElementById("status");
+const micBtn = document.getElementById("micBtn");
+const badge = document.getElementById("modalityBadge");
+const metricMode = document.getElementById("metricMode");
+
+/* =========================================================
+   2. BOX CONTROLS
+========================================================= */
+
+function changeBoxColor(color) {
+  box.style.backgroundColor = color;
+  status.textContent = "Box color changed.";
+}
+
+function makeBigger() {
+  box.style.transform = "scale(1.4)";
+  status.textContent = "Box enlarged.";
+}
+
+function makeSmaller() {
+  box.style.transform = "scale(1)";
+  status.textContent = "Box returned to normal size.";
+}
+
+function resetBox() {
+  box.style.transform = "scale(1)";
+  box.style.backgroundColor = "#0056b3";
+  box.style.left = "calc(50% - 40px)";
+  box.style.top = "140px";
+  status.textContent = "Box reset to its original state.";
+}
+
+/* =========================================================
+   3. GESTURE CONTROLS
+   Mouse + Touch dragging
+========================================================= */
+
+let isDragging = false;
+let startX = 0;
+let startY = 0;
+let initialLeft = 0;
+let initialTop = 0;
+
+function startDrag(e) {
+  isDragging = true;
+
+  const point = e.touches ? e.touches[0] : e;
+
+  startX = point.clientX;
+  startY = point.clientY;
+
+  initialLeft = box.offsetLeft;
+  initialTop = box.offsetTop;
+
+  box.style.cursor = "grabbing";
+
+  if (e.cancelable) e.preventDefault();
+}
+
+function moveDrag(e) {
+  if (!isDragging) return;
+
+  const point = e.touches ? e.touches[0] : e;
+
+  const dx = point.clientX - startX;
+  const dy = point.clientY - startY;
+
+  const stage = document.getElementById("stage");
+
+  let newLeft = initialLeft + dx;
+  let newTop = initialTop + dy;
+
+  newLeft = Math.max(0, Math.min(newLeft, stage.clientWidth - box.offsetWidth));
+  newTop = Math.max(0, Math.min(newTop, stage.clientHeight - box.offsetHeight));
+
+  box.style.left = newLeft + "px";
+  box.style.top = newTop + "px";
+
+  if (e.cancelable) e.preventDefault();
+}
+
+function stopDrag() {
+  if (isDragging) {
+    isDragging = false;
+    box.style.cursor = "grab";
+  }
+}
+
+box.addEventListener("mousedown", startDrag);
+document.addEventListener("mousemove", moveDrag);
+document.addEventListener("mouseup", stopDrag);
+
+box.addEventListener("touchstart", startDrag, { passive: false });
+document.addEventListener("touchmove", moveDrag, { passive: false });
+document.addEventListener("touchend", stopDrag);
+
+/* =========================================================
+   4. SPEECH CONTROL
+========================================================= */
+
+const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (SpeechRecognition) {
+
+  const recognition = new SpeechRecognition();
+
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.lang = "en-US";
+
+  let listening = false;
+
+  micBtn.addEventListener("click", () => {
+
+    if (!listening) {
+      try {
+        recognition.start();
+        listening = true;
+        micBtn.textContent = "🛑 Stop Voice Control";
+        micBtn.style.backgroundColor = "#dc3545";
+        status.textContent =
+          "Listening... Try: red, blue, green, bigger, smaller, reset.";
+      } catch (error) {
+        console.log(error);
+      }
+
+    } else {
+      recognition.stop();
+    }
+  });
+
+  recognition.onresult = (event) => {
+
+    const command =
+      event.results[event.results.length - 1][0]
+      .transcript
+      .trim()
+      .toLowerCase();
+
+    status.textContent =
+      `Voice Command Detected: "${command}"`;
+
+    if (command.includes("red"))
+      changeBoxColor("#d9534f");
+
+    else if (command.includes("blue"))
+      changeBoxColor("#0056b3");
+
+    else if (command.includes("green"))
+      changeBoxColor("#28a745");
+
+    else if (command.includes("bigger"))
+      makeBigger();
+
+    else if (command.includes("smaller"))
+      makeSmaller();
+
+    else if (command.includes("reset"))
+      resetBox();
+  };
+
+  recognition.onend = () => {
+    listening = false;
+    micBtn.textContent = "🎙️ Start Voice Control";
+    micBtn.style.backgroundColor = "#28a745";
+  };
+
+  recognition.onerror = (event) => {
+    status.textContent = "Speech error: " + event.error;
+    listening = false;
+    micBtn.textContent = "🎙️ Start Voice Control";
+    micBtn.style.backgroundColor = "#28a745";
+  };
+
+} else {
+
+  micBtn.disabled = true;
+  status.textContent =
+    "Web Speech API is not supported in this browser.";
+}
+
+/* =========================================================
+   5. ADAPTIVE UI MODALITY ENGINE
+========================================================= */
+
+function setModality(modeName, bodyClass) {
+
+  document.body.classList.remove(
+    "mode-mouse",
+    "mode-touch",
+    "mode-keyboard"
+  );
+
+  document.body.classList.add(bodyClass);
+
+  badge.textContent = "Active Modality: " + modeName;
+  metricMode.textContent = modeName;
+}
+
+window.addEventListener("touchstart", () => {
+  setModality(
+    "Touch (Coarse Pointer)",
+    "mode-touch"
+  );
+}, { passive: true });
+
+window.addEventListener("mousemove", () => {
+
+  if (!document.body.classList.contains("mode-touch")) {
+    setModality(
+      "Mouse (Fine Pointer)",
+      "mode-mouse"
+    );
+  }
+
+}, { passive: true });
+
+window.addEventListener("keydown", (e) => {
+
+  if (e.key === "Tab") {
+
+    setModality(
+      "Keyboard (Focus Navigation)",
+      "mode-keyboard"
+    );
+
+  }
+
+});
+
+/* =========================================================
+   6. EYE-TRACKING SIMULATION
+========================================================= */
+
+const gazePointer = document.getElementById("gazePointer");
+const gx = document.getElementById("gx");
+const gy = document.getElementById("gy");
+const fixTarget = document.getElementById("fixTarget");
+const dwell = document.getElementById("dwell");
+const cards = document.querySelectorAll(".card");
+
+let currentCard = null;
+let fixationTimer = null;
+let dwellInterval = null;
+let startTime = 0;
+
+const FIXATION_THRESHOLD_MS = 500;
+
+document.addEventListener("mousemove", (e) => {
+
+  gazePointer.style.display = "block";
+
+  gazePointer.style.left = e.clientX + "px";
+  gazePointer.style.top = e.clientY + "px";
+
+  gx.textContent = e.clientX;
+  gy.textContent = e.clientY;
+
+  const element = document.elementFromPoint(
+    e.clientX,
+    e.clientY
+  );
+
+  const card = element
+    ? element.closest(".card")
+    : null;
+
+  if (card !== currentCard) {
+
+    if (currentCard) {
+      currentCard.classList.remove("fixated");
+    }
+
+    clearTimeout(fixationTimer);
+    clearInterval(dwellInterval);
+
+    currentCard = card;
+    dwell.textContent = "0";
+
+    if (card) {
+
+      fixTarget.textContent =
+        card.dataset.id + " (Pending...)";
+
+      startTime = Date.now();
+
+      dwellInterval = setInterval(() => {
+        dwell.textContent =
+          Date.now() - startTime;
+      }, 50);
+
+      fixationTimer = setTimeout(() => {
+
+        card.classList.add("fixated");
+
+        fixTarget.textContent =
+          card.dataset.id + " (FIXATED!)";
+
+        gazePointer.style.width = "36px";
+        gazePointer.style.height = "36px";
+
+      }, FIXATION_THRESHOLD_MS);
+
+    } else {
+
+      fixTarget.textContent = "None";
+
+      gazePointer.style.width = "24px";
+      gazePointer.style.height = "24px";
+    }
+  }
+});
+
+/* Reset gaze pointer size when mouse leaves a card */
+cards.forEach(card => {
+
+  card.addEventListener("mouseleave", () => {
+
+    card.classList.remove("fixated");
+
+    gazePointer.style.width = "24px";
+    gazePointer.style.height = "24px";
+
+  });
+
+});
+
+</script>
+
+</body>
+</html>
